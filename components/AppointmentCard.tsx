@@ -7,9 +7,10 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Calendar, Clock, User, CircleCheck as CheckCircle, Circle as XCircle } from 'lucide-react-native';
+import { AppointmentWithDetails, AppointmentStatus } from '@/models/appointment';
 
 interface AppointmentCardProps {
-  appointment: any;
+  appointment: AppointmentWithDetails;
   userRole: 'customer' | 'barber';
   onAccept?: () => void;
   onReject?: () => void;
@@ -17,18 +18,18 @@ interface AppointmentCardProps {
   style?: ViewStyle;
 }
 
-const STATUS_COLORS = {
-  requested: '#F59E0B',
-  confirmed: '#10B981',
-  completed: '#8B5CF6',
-  cancelled: '#EF4444',
+const STATUS_COLORS: Record<AppointmentStatus, string> = {
+  [AppointmentStatus.REQUESTED]: '#F59E0B',
+  [AppointmentStatus.CONFIRMED]: '#10B981',
+  [AppointmentStatus.COMPLETED]: '#8B5CF6',
+  [AppointmentStatus.CANCELLED]: '#EF4444',
 };
 
-const STATUS_BACKGROUNDS = {
-  requested: '#FEF3C7',
-  confirmed: '#D1FAE5',
-  completed: '#E9D5FF',
-  cancelled: '#FEE2E2',
+const STATUS_BACKGROUNDS: Record<AppointmentStatus, string> = {
+  [AppointmentStatus.REQUESTED]: '#FEF3C7',
+  [AppointmentStatus.CONFIRMED]: '#D1FAE5',
+  [AppointmentStatus.COMPLETED]: '#E9D5FF',
+  [AppointmentStatus.CANCELLED]: '#FEE2E2',
 };
 
 export function AppointmentCard({ 
@@ -78,11 +79,11 @@ export function AppointmentCard({
 
         <View style={[
           styles.statusBadge,
-          { backgroundColor: STATUS_BACKGROUNDS[appointment.status] }
+          { backgroundColor: STATUS_BACKGROUNDS[appointment.status as AppointmentStatus] }
         ]}>
           <Text style={[
             styles.statusText,
-            { color: STATUS_COLORS[appointment.status] }
+            { color: STATUS_COLORS[appointment.status as AppointmentStatus] }
           ]}>
             {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
           </Text>

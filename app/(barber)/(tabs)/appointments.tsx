@@ -6,12 +6,16 @@ import {
   SafeAreaView,
   FlatList,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
-import { useAuthStore } from '@/stores/authStore';
-import { useBarberStore } from '@/stores/barberStore';
-import { useAppointmentStore } from '@/stores/appointmentStore';
+import { useAuth } from '@/hooks/useAuth';
+import { useBarberProfileContext } from '@/contexts/BarberProfileContext';
+import { useAppointments } from '@/hooks/useAppointments';
 import { AppointmentCard } from '@/components/AppointmentCard';
 import { Calendar, Clock } from 'lucide-react-native';
+import { Database } from '@/types/database';
+
+type Appointment = Database['public']['Tables']['appointments']['Row'];
 
 const STATUS_TABS = [
   { key: 'requested', label: 'Requested' },
@@ -21,33 +25,104 @@ const STATUS_TABS = [
 ];
 
 export default function BarberAppointmentsScreen() {
-  const { userProfile } = useAuthStore();
-  const { barberProfile } = useBarberStore();
-  const { appointments, loading, loadAppointments, updateAppointmentStatus } = useAppointmentStore();
+  const { userProfile } = useAuth();
+  const { barberProfile } = useBarberProfileContext();
+  const { appointments, loading, error, loadAppointments, confirmAppointment, cancelAppointment } = useAppointments(
+    userProfile?.id,
+    'barber'
+  );
   const [activeTab, setActiveTab] = useState('requested');
 
   useEffect(() => {
-    if (barberProfile) {
-      loadAppointments(barberProfile.id, 'barber');
+    if (userProfile) {
+      loadAppointments();
     }
-  }, [barberProfile]);
+  }, [userProfile?.id]); // Only depend on userProfile.id, not the function
 
-  const filteredAppointments = appointments.filter(apt => apt.status === activeTab);
+  const filteredAppointments = (appointments || []).filter(apt => 
+    apt.status === activeTab
+  );
 
-  const handleAppointmentAction = async (id: string, status: string) => {
-    await updateAppointmentStatus(id, status);
+  const handleStatusUpdate = async (appointmentId: string, newStatus: any) => {
+    if (newStatus === 'confirmed') {
+      await confirmAppointment(appointmentId);
+    } else if (newStatus === 'cancelled') {
+      await cancelAppointment(appointmentId);
+    }
   };
 
-  const renderAppointment = ({ item }: { item: any }) => (
+  const renderAppointment = ({ item }: { item: Appointment }) => (
     <AppointmentCard
       appointment={item}
       userRole="barber"
-      onAccept={() => handleAppointmentAction(item.id, 'confirmed')}
-      onReject={() => handleAppointmentAction(item.id, 'cancelled')}
-      onComplete={() => handleAppointmentAction(item.id, 'completed')}
+      onAccept={() => handleStatusUpdate(item.id, 'confirmed')}
+      onReject={() => handleStatusUpdate(item.id, 'cancelled')}
       style={styles.appointmentCard}
     />
   );
+
+  const renderTab = (tab: typeof STATUS_TABS[0]) => (
+    <TouchableOpacity
+      key={tab.key}
+      style={[styles.tab, activeTab === tab.key && styles.activeTab]}
+      onPress={() => setActiveTab(tab.key)}
+    >
+      <Text style={[styles.tabText, activeTab === tab.key && styles.activeTabText]}>
+        {tab.label}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <Calendar size={48} color="#9CA3AF" />
+      <Text style={styles.emptyTitle}>No appointments found</Text>
+      <Text style={styles.emptyText}>
+        No {activeTab} appointments at the moment
+      </Text>
+    </View>
+  );
+
+  const renderLoadingState = () => (
+    <View style={styles.loadingState}>
+      <ActivityIndicator size="large" color="#3B82F6" />
+      <Text style={styles.loadingText}>Loading appointments...</Text>
+    </View>
+  );
+
+  const renderErrorState = () => (
+    <View style={styles.errorState}>
+      <Text style={styles.errorTitle}>Failed to load appointments</Text>
+      <Text style={styles.errorText}>{error}</Text>
+      <TouchableOpacity style={styles.retryButton} onPress={loadAppointments}>
+        <Text style={styles.retryButtonText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Calendar size={24} color="#3B82F6" />
+          <Text style={styles.title}>Appointments</Text>
+        </View>
+        {renderLoadingState()}
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Calendar size={24} color="#3B82F6" />
+          <Text style={styles.title}>Appointments</Text>
+        </View>
+        {renderErrorState()}
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,53 +131,18 @@ export default function BarberAppointmentsScreen() {
         <Text style={styles.title}>Appointments</Text>
       </View>
 
-      <View style={styles.tabsContainer}>
-        <FlatList
-          data={STATUS_TABS}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              key={item.key}
-              style={[styles.tab, activeTab === item.key && styles.activeTab]}
-              onPress={() => setActiveTab(item.key)}
-            >
-              <Text
-                style={[styles.tabText, activeTab === item.key && styles.activeTabText]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-          keyExtractor={(item) => item.key}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabs}
-        />
+      <View style={styles.tabContainer}>
+        {STATUS_TABS.map(renderTab)}
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading appointments...</Text>
-        </View>
-      ) : filteredAppointments.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Clock size={48} color="#9CA3AF" />
-          <Text style={styles.emptyTitle}>No {activeTab} appointments</Text>
-          <Text style={styles.emptySubtitle}>
-            {activeTab === 'requested' 
-              ? 'New appointment requests will appear here'
-              : `No appointments with ${activeTab} status`
-            }
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredAppointments}
-          renderItem={renderAppointment}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.appointmentsList}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <FlatList
+        data={filteredAppointments}
+        renderItem={renderAppointment}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={renderEmptyState}
+      />
     </SafeAreaView>
   );
 }
@@ -110,81 +150,117 @@ export default function BarberAppointmentsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    marginLeft: 12,
-  },
-  tabsContainer: {
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  tabs: {
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginLeft: 12,
+    fontFamily: 'Inter-Bold',
+  },
+  tabContainer: {
+    flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   tab: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
     marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
   },
   activeTab: {
     backgroundColor: '#3B82F6',
   },
   tabText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontWeight: '500',
     color: '#6B7280',
+    fontFamily: 'Inter-Medium',
   },
   activeTabText: {
-    color: '#FFFFFF',
-    fontFamily: 'Inter-SemiBold',
+    color: '#fff',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  listContainer: {
+    padding: 20,
   },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+  appointmentCard: {
+    marginBottom: 16,
   },
-  emptyContainer: {
+  emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 20,
+    fontWeight: '600',
     color: '#1F2937',
     marginTop: 16,
     marginBottom: 8,
+    fontFamily: 'Inter-SemiBold',
   },
-  emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+  emptyText: {
+    fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
+    lineHeight: 24,
+    fontFamily: 'Inter-Regular',
   },
-  appointmentsList: {
-    padding: 20,
+  loadingState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  appointmentCard: {
-    marginBottom: 16,
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+    fontFamily: 'Inter-Regular',
+  },
+  errorState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#EF4444',
+    marginBottom: 8,
+    fontFamily: 'Inter-SemiBold',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontFamily: 'Inter-Regular',
+  },
+  retryButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'Inter-SemiBold',
   },
 });

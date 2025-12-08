@@ -9,10 +9,11 @@ import {
   FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '@/stores/authStore';
-import { useBarberStore } from '@/stores/barberStore';
-import { useAppointmentStore } from '@/stores/appointmentStore';
+import { useAuth } from '@/hooks/useAuth';
+import { useBarberProfileContext } from '@/contexts/BarberProfileContext';
+import { useAppointments } from '@/hooks/useAppointments';
 import { AppointmentCard } from '@/components/AppointmentCard';
+import { AppointmentWithDetails } from '@/models/appointment';
 import { 
   LayoutDashboard, 
   Clock, 
@@ -25,21 +26,15 @@ import { t } from '@/lib/i18n';
 
 export default function BarberDashboardScreen() {
   const router = useRouter();
-  const { userProfile } = useAuthStore();
-  const { barberProfile, loadBarberProfile, loading } = useBarberStore();
-  const { appointments, loadAppointments, updateAppointmentStatus } = useAppointmentStore();
+  const { userProfile } = useAuth();
+  const { barberProfile, loading } = useBarberProfileContext();
+  const { appointments, loadAppointments, confirmAppointment, cancelAppointment } = useAppointments(userProfile?.id, 'barber');
 
   useEffect(() => {
     if (userProfile) {
-      loadBarberProfile(userProfile.id);
+      loadAppointments();
     }
-  }, [userProfile]);
-
-  useEffect(() => {
-    if (barberProfile) {
-      loadAppointments(barberProfile.id, 'barber');
-    }
-  }, [barberProfile]);
+  }, [userProfile?.id]); // Only depend on userProfile.id, not the function
 
   useEffect(() => {
     // Redirect only after loading completes and no profile exists
@@ -48,18 +43,22 @@ export default function BarberDashboardScreen() {
     }
   }, [loading, barberProfile, userProfile]);
 
-  const pendingAppointments = appointments.filter(apt => apt.status === 'requested');
-  const todayAppointments = appointments.filter(apt => {
+  const pendingAppointments = (appointments || []).filter(apt => apt.status === 'requested');
+  const todayAppointments = (appointments || []).filter(apt => {
     const today = new Date().toDateString();
     const aptDate = new Date(apt.start_time).toDateString();
     return aptDate === today && apt.status === 'confirmed';
   });
 
   const handleAppointmentAction = async (id: string, status: string) => {
-    await updateAppointmentStatus(id, status);
+    if (status === 'confirmed') {
+      await confirmAppointment(id);
+    } else if (status === 'cancelled') {
+      await cancelAppointment(id);
+    }
   };
 
-  const renderPendingAppointment = ({ item }: { item: any }) => (
+  const renderPendingAppointment = ({ item }: { item: AppointmentWithDetails }) => (
     <AppointmentCard
       appointment={item}
       userRole="barber"

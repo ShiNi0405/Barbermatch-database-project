@@ -1,104 +1,73 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  FlatList,
-  TouchableOpacity,
-} from 'react-native';
-import { useAuthStore } from '@/stores/authStore';
-import { useAppointmentStore } from '@/stores/appointmentStore';
-import { AppointmentCard } from '@/components/AppointmentCard';
-import { Calendar, Clock } from 'lucide-react-native';
-
-const STATUS_TABS = [
-  { key: 'all', label: 'All' },
-  { key: 'requested', label: 'Requested' },
-  { key: 'confirmed', label: 'Confirmed' },
-  { key: 'completed', label: 'Completed' },
-  { key: 'cancelled', label: 'Cancelled' },
-];
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { Calendar } from 'lucide-react-native';
+import { useAppointmentScreen } from '@/hooks/useAppointmentScreen';
+import { StatusTabs } from '@/components/StatusTabs';
+import { AppointmentsList } from '@/components/AppointmentsList';
+import { LoadingState } from '@/components/LoadingState';
+import { ErrorState } from '@/components/ErrorState';
 
 export default function CustomerAppointmentsScreen() {
-  const { userProfile } = useAuthStore();
-  const { appointments, loading, loadAppointments } = useAppointmentStore();
-  const [activeTab, setActiveTab] = useState('all');
+  const {
+    appointments,
+    loading,
+    error,
+    activeTab,
+    loadAppointments,
+    handleTabPress,
+    handleRetry,
+    statusTabs,
+  } = useAppointmentScreen();
 
+  // Load appointments when component mounts
   useEffect(() => {
-    if (userProfile) {
-      loadAppointments(userProfile.id, 'customer');
-    }
-  }, [userProfile]);
+    loadAppointments();
+  }, [loadAppointments]);
 
-  const filteredAppointments = appointments.filter(apt => 
-    activeTab === 'all' || apt.status === activeTab
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <Calendar size={24} color="#3B82F6" />
+      <Text style={styles.title}>Appointments</Text>
+    </View>
   );
 
-  const renderAppointment = ({ item }: { item: any }) => (
-    <AppointmentCard
-      appointment={item}
-      userRole="customer"
-      style={styles.appointmentCard}
-    />
-  );
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        {renderHeader()}
+        <LoadingState message="Loading appointments..." />
+      </SafeAreaView>
+    );
+  }
 
-  const renderTab = (tab: typeof STATUS_TABS[0]) => (
-    <TouchableOpacity
-      key={tab.key}
-      style={[styles.tab, activeTab === tab.key && styles.activeTab]}
-      onPress={() => setActiveTab(tab.key)}
-    >
-      <Text
-        style={[styles.tabText, activeTab === tab.key && styles.activeTabText]}
-      >
-        {tab.label}
-      </Text>
-    </TouchableOpacity>
-  );
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        {renderHeader()}
+        <ErrorState
+          title="Failed to load appointments"
+          message={error}
+          onRetry={handleRetry}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Calendar size={24} color="#3B82F6" />
-        <Text style={styles.title}>My Appointments</Text>
-      </View>
+      {renderHeader()}
+      
+      <StatusTabs
+        tabs={statusTabs}
+        activeTab={activeTab}
+        onTabPress={handleTabPress}
+      />
 
-      <View style={styles.tabsContainer}>
-        <FlatList
-          data={STATUS_TABS}
-          renderItem={({ item }) => renderTab(item)}
-          keyExtractor={(item) => item.key}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabs}
-        />
-      </View>
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading appointments...</Text>
-        </View>
-      ) : filteredAppointments.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Clock size={48} color="#9CA3AF" />
-          <Text style={styles.emptyTitle}>No appointments found</Text>
-          <Text style={styles.emptySubtitle}>
-            {activeTab === 'all' 
-              ? 'Book your first appointment to get started'
-              : `No ${activeTab} appointments`
-            }
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredAppointments}
-          renderItem={renderAppointment}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.appointmentsList}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <AppointmentsList
+        appointments={appointments}
+        userRole="customer"
+        activeTab={activeTab}
+      />
     </SafeAreaView>
   );
 }
@@ -106,81 +75,21 @@ export default function CustomerAppointmentsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    marginLeft: 12,
-  },
-  tabsContainer: {
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  tabs: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  tab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-  },
-  activeTab: {
-    backgroundColor: '#3B82F6',
-  },
-  tabText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  activeTabText: {
-    color: '#FFFFFF',
-    fontFamily: 'Inter-SemiBold',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
     color: '#1F2937',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  appointmentsList: {
-    padding: 20,
-  },
-  appointmentCard: {
-    marginBottom: 16,
+    marginLeft: 12,
+    fontFamily: 'Inter-Bold',
   },
 });

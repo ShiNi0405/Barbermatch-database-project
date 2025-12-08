@@ -8,14 +8,14 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { Sparkles, Heart } from 'lucide-react-native';
 import { BarberCard } from '@/components/BarberCard';
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
-  const { userProfile } = useAuthStore();
+  const { userProfile } = useAuth();
   const [favouriteBarbers, setFavouriteBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
 

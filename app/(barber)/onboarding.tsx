@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,14 +10,15 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '@/stores/authStore';
-import { useBarberStore } from '@/stores/barberStore';
+import { useAuth } from '@/hooks/useAuth';
+import { useBarberProfileContext } from '@/contexts/BarberProfileContext';
 import { MapPin, Clock, User } from 'lucide-react-native';
 
 export default function BarberOnboardingScreen() {
   const router = useRouter();
-  const { userProfile } = useAuthStore();
-  const { createBarberProfile } = useBarberStore();
+  const { userProfile } = useAuth();
+  const { barberProfile, createOrUpdateProfile, loading } = useBarberProfileContext();
+  const hasRedirected = useRef(false);
 
   const [formData, setFormData] = useState({
     salonName: '',
@@ -34,7 +35,18 @@ export default function BarberOnboardingScreen() {
       sunday: { open: '10:00', close: '16:00', closed: true },
     },
   });
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Profile is loaded automatically by the useBarberProfile hook when userProfile changes
+
+  useEffect(() => {
+    // Only redirect if we're not currently submitting, profile exists, and haven't redirected yet
+    if (!loading && !submitting && barberProfile && !hasRedirected.current) {
+      console.log('🏪 Redirecting to barber tabs after profile loaded');
+      hasRedirected.current = true;
+      router.replace('/(barber)/(tabs)');
+    }
+  }, [loading, submitting, barberProfile]);
 
   const handleSubmit = async () => {
     if (!formData.salonName || !formData.phone || !formData.address) {
@@ -42,11 +54,12 @@ export default function BarberOnboardingScreen() {
       return;
     }
 
-    setLoading(true);
+    console.log('🏪 Submitting barber profile...');
+    setSubmitting(true);
 
     try {
-      const result = await createBarberProfile({
-        user_id: userProfile?.id,
+      const result = await createOrUpdateProfile({
+        user_id: userProfile?.id!,
         salon_name: formData.salonName,
         phone: formData.phone,
         address: formData.address,
@@ -56,13 +69,20 @@ export default function BarberOnboardingScreen() {
         operating_hours: formData.operatingHours,
       });
 
-      if (result.error) {
-        Alert.alert('Error', result.error);
+      console.log('🏪 Profile creation result:', result);
+
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to create barber profile');
       } else {
+        console.log('🏪 Profile created successfully, redirecting...');
+        hasRedirected.current = true;
         router.replace('/(barber)/(tabs)');
       }
+    } catch (error) {
+      console.error('🏪 Error creating profile:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -79,12 +99,13 @@ export default function BarberOnboardingScreen() {
 
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Salon/Barber Name *</Text>
+            <Text style={styles.label}>Salon Name *</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter your salon or business name"
               value={formData.salonName}
-              onChangeText={(text) => setFormData({ ...formData, salonName: text })}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, salonName: text }))}
+              placeholder="Enter your salon name"
+              placeholderTextColor="#9CA3AF"
             />
           </View>
 
@@ -92,54 +113,65 @@ export default function BarberOnboardingScreen() {
             <Text style={styles.label}>Phone Number *</Text>
             <TextInput
               style={styles.input}
-              placeholder="(555) 123-4567"
               value={formData.phone}
-              onChangeText={(text) => setFormData({ ...formData, phone: text })}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
+              placeholder="Enter your phone number"
+              placeholderTextColor="#9CA3AF"
               keyboardType="phone-pad"
             />
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Address *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="123 Main St, City, State"
-              value={formData.address}
-              onChangeText={(text) => setFormData({ ...formData, address: text })}
-              multiline
-            />
+            <View style={styles.addressContainer}>
+              <MapPin size={20} color="#6B7280" style={styles.addressIcon} />
+              <TextInput
+                style={styles.addressInput}
+                value={formData.address}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, address: text }))}
+                placeholder="Enter your salon address"
+                placeholderTextColor="#9CA3AF"
+                multiline
+              />
+            </View>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Bio</Text>
+            <Text style={styles.label}>Bio (Optional)</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
-              placeholder="Tell customers about your experience and specialties..."
               value={formData.bio}
-              onChangeText={(text) => setFormData({ ...formData, bio: text })}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, bio: text }))}
+              placeholder="Tell customers about your services and experience"
+              placeholderTextColor="#9CA3AF"
               multiline
               numberOfLines={4}
             />
           </View>
 
-          <View style={styles.hoursSection}>
-            <View style={styles.hoursHeader}>
-              <Clock size={20} color="#3B82F6" />
-              <Text style={styles.hoursTitle}>Operating Hours</Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Operating Hours</Text>
+            <View style={styles.hoursContainer}>
+              <Clock size={20} color="#6B7280" style={styles.hoursIcon} />
+              <Text style={styles.hoursText}>
+                Monday - Friday: 9:00 AM - 6:00 PM{'\n'}
+                Saturday: 9:00 AM - 5:00 PM{'\n'}
+                Sunday: Closed
+              </Text>
             </View>
             <Text style={styles.hoursNote}>
-              Default hours have been set. You can customize them later in your profile.
+              You can customize your hours later in your profile settings
             </Text>
           </View>
         </View>
 
         <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+          style={[styles.submitButton, (loading || submitting) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
-          disabled={loading}
+          disabled={loading || submitting}
         >
           <Text style={styles.submitButtonText}>
-            {loading ? 'Creating Profile...' : 'Complete Setup'}
+            {loading || submitting ? 'Creating Profile...' : 'Complete Profile'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -150,94 +182,115 @@ export default function BarberOnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#fff',
   },
   scrollContent: {
-    paddingBottom: 40,
+    padding: 20,
   },
   header: {
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 32,
+    marginBottom: 32,
   },
   title: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
+    fontSize: 28,
+    fontWeight: 'bold',
     color: '#1F2937',
     marginTop: 16,
     marginBottom: 8,
+    fontFamily: 'Inter-Bold',
   },
   subtitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
+    fontFamily: 'Inter-Regular',
   },
   form: {
-    paddingHorizontal: 20,
+    marginBottom: 32,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   label: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#374151',
     marginBottom: 8,
+    fontFamily: 'Inter-SemiBold',
   },
   input: {
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#D1D5DB',
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
+    backgroundColor: '#F9FAFB',
     fontFamily: 'Inter-Regular',
-    color: '#1F2937',
   },
   textArea: {
     height: 100,
     textAlignVertical: 'top',
   },
-  hoursSection: {
-    backgroundColor: '#FFFFFF',
+  addressContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
     borderRadius: 12,
     padding: 16,
-    marginTop: 8,
+    backgroundColor: '#F9FAFB',
   },
-  hoursHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+  addressIcon: {
+    marginRight: 12,
+    marginTop: 2,
   },
-  hoursTitle: {
+  addressInput: {
+    flex: 1,
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
     color: '#1F2937',
-    marginLeft: 8,
+    fontFamily: 'Inter-Regular',
+  },
+  hoursContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+  },
+  hoursIcon: {
+    marginRight: 12,
+    marginTop: 2,
+  },
+  hoursText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+    lineHeight: 24,
+    fontFamily: 'Inter-Regular',
   },
   hoursNote: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    lineHeight: 20,
+    marginTop: 8,
+    fontStyle: 'italic',
+    fontFamily: 'Inter-Regular',
   },
   submitButton: {
     backgroundColor: '#3B82F6',
-    marginHorizontal: 20,
-    marginTop: 32,
-    borderRadius: 12,
     padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   submitButtonDisabled: {
     backgroundColor: '#9CA3AF',
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
     fontFamily: 'Inter-SemiBold',
-    textAlign: 'center',
   },
 });

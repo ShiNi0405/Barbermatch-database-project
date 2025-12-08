@@ -1,33 +1,60 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuth } from '@/hooks/useAuth';
 import { Scissors, User } from 'lucide-react-native';
 
 export default function RoleSelectionScreen() {
   const [selectedRole, setSelectedRole] = useState<'customer' | 'barber' | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const router = useRouter();
-  const { updateUserRole } = useAuthStore();
+  const { user, updateUserRole, loading: authLoading } = useAuth();
+
+  // Show loading if auth is still loading
+  if (authLoading || !user) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
 
   const handleRoleSelection = async () => {
-    if (!selectedRole) return;
+    if (!selectedRole || !user?.id) {
+      console.log('❌ Missing selectedRole or user ID:', { selectedRole, userId: user?.id });
+      return;
+    }
 
+    console.log('🔄 Starting role selection:', { selectedRole, userId: user.id });
     setLoading(true);
+    setError(null);
     
     try {
-      const result = await updateUserRole(selectedRole);
+      const result = await updateUserRole({
+        userId: user.id,
+        role: selectedRole
+      });
       
-      if (result.error) {
-        console.error('Error updating role:', result.error);
-      } else {
+      console.log('✅ Role update result:', result);
+      
+      if (result.success) {
+        console.log('🎉 Role updated successfully, navigating to:', selectedRole);
         if (selectedRole === 'customer') {
           router.replace('/(customer)/(tabs)');
         } else {
           router.replace('/(barber)/(tabs)');
         }
+      } else {
+        console.error('❌ Error updating role:', result.error);
+        setError(result.error || 'Failed to update role. Please try again.');
       }
+    } catch (error) {
+      console.error('❌ Exception during role update:', error);
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -76,6 +103,12 @@ export default function RoleSelectionScreen() {
             Manage your business and connect with customers
           </Text>
         </TouchableOpacity>
+
+        {error && (
+          <Text style={styles.errorText}>
+            {error}
+          </Text>
+        )}
 
         <TouchableOpacity
           style={[
@@ -161,5 +194,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#EF4444',
+    textAlign: 'center',
+    marginTop: 16,
+    paddingHorizontal: 16,
   },
 });

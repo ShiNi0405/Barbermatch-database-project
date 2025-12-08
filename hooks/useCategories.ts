@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/database';
+import { ServiceResult, createSuccessResult, createErrorResult } from '@/types/common';
 
 type ServiceCategory = Database['public']['Tables']['service_categories']['Row'];
 
@@ -19,8 +20,8 @@ export function useCategories(
   boolean,
   string | null,
   () => Promise<void>,
-  (name: string) => Promise<{ error?: string }>,
-  (id: string) => Promise<{ error?: string }>
+  (name: string) => Promise<ServiceResult<Category>>,
+  (id: string) => Promise<ServiceResult<void>>
 ] {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,14 +68,14 @@ export function useCategories(
   }, [loadCategories]);
 
   const addCategory = useCallback(
-    async (name: string): Promise<{ error?: string }> => {
+    async (name: string): Promise<ServiceResult<Category>> => {
       if (!barberId) {
-        return { error: 'Missing barber ID' };
+        return createErrorResult('Missing barber ID');
       }
 
       const trimmedName = name.trim();
       if (!trimmedName) {
-        return { error: 'Category name cannot be empty' };
+        return createErrorResult('Category name cannot be empty');
       }
 
       // Check if category already exists for this barber
@@ -84,7 +85,7 @@ export function useCategories(
       );
       
       if (existingCategory) {
-        return { error: 'Category already exists' };
+        return createErrorResult('Category already exists');
       }
 
       // Optimistic update
@@ -119,35 +120,35 @@ export function useCategories(
           )
         );
 
-        return {};
+        return createSuccessResult({ ...(data as any), isGlobal: false });
       } catch (err: any) {
         // Rollback optimistic update
         setCategories(prev => prev.filter(cat => cat.id !== tempId));
-        return { error: err?.message || 'Failed to add category' };
+        return createErrorResult(err?.message || 'Failed to add category');
       }
     },
     [barberId, categories]
   );
 
   const deleteCategory = useCallback(
-    async (id: string): Promise<{ error?: string }> => {
+    async (id: string): Promise<ServiceResult<void>> => {
       if (!barberId) {
-        return { error: 'Missing barber ID' };
+        return createErrorResult('Missing barber ID');
       }
 
       const category = categories.find(cat => cat.id === id);
       if (!category) {
-        return { error: 'Category not found' };
+        return createErrorResult('Category not found');
       }
 
       // Cannot delete global categories
       if (category.isGlobal) {
-        return { error: 'Cannot delete global category' };
+        return createErrorResult('Cannot delete global category');
       }
 
       // Cannot delete categories that belong to other barbers
       if (category.barber_id !== barberId) {
-        return { error: 'Cannot delete category' };
+        return createErrorResult('Cannot delete category');
       }
 
       // Optimistic update
@@ -162,11 +163,11 @@ export function useCategories(
 
         if (deleteError) throw deleteError;
 
-        return {};
+        return createSuccessResult(undefined);
       } catch (err: any) {
         // Rollback optimistic update
         setCategories(prev => [...prev, category]);
-        return { error: err?.message || 'Failed to delete category' };
+        return createErrorResult(err?.message || 'Failed to delete category');
       }
     },
     [barberId, categories]

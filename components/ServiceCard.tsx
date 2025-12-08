@@ -8,9 +8,19 @@ import {
   ViewStyle,
 } from 'react-native';
 import { CreditCard as Edit3, Trash2, Clock } from 'lucide-react-native';
+import { Database } from '@/types/database';
+
+type Service = Database['public']['Tables']['services']['Row'];
+
+interface ServiceWithCategory extends Omit<Service, 'category'> {
+  category?: {
+    id: string;
+    name: string;
+  } | null;
+}
 
 interface ServiceCardProps {
-  service: any;
+  service: ServiceWithCategory;
   onEdit: () => void;
   onDelete: () => void;
   style?: ViewStyle;
@@ -29,7 +39,7 @@ export function ServiceCard({ service, onEdit, onDelete, style }: ServiceCardPro
 
   const getCategoryColor = () => {
     // Use a hash function to generate consistent colors for dynamic categories
-    const categoryName = service.service_categories?.name || service.category || 'other';
+    const categoryName = service.category?.name || 'other';
     const colors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4', '#84CC16', '#F97316'];
     const hash = categoryName.split('').reduce((a: number, b: string) => {
       a = ((a << 5) - a) + b.charCodeAt(0);
@@ -39,12 +49,9 @@ export function ServiceCard({ service, onEdit, onDelete, style }: ServiceCardPro
   };
 
   const getCategoryLabel = () => {
-    // Use the new category name if available, otherwise fall back to old category
-    if (service.service_categories?.name) {
-      return service.service_categories.name;
-    }
-    if (service.category) {
-      return service.category.charAt(0).toUpperCase() + service.category.slice(1);
+    // Use the category name if available
+    if (service.category?.name) {
+      return service.category.name;
     }
     return 'Other';
   };
